@@ -99,11 +99,11 @@ static sval_t regval(
 	return named_regval( ph.reg_names[op.reg] );
 }
 
-static bool resolve_op_value( insn_t decodedInsn, uint64& resolved )
+static bool resolve_op_value(const insn_t& decodedInsn, uint64& resolved )
 {
 	// Get operand value (possibly an ea).
 	uint64 v = 0;
-	const op_t& op = decodedInsn.itype == NN_test ? decodedInsn.ops[0] : decodedInsn.ops[1];
+	const op_t& op = decodedInsn.ops[0].type != o_reg ? decodedInsn.ops[0] : decodedInsn.ops[1];
 
 	//LOG("type %i\n", op.type);
 
@@ -138,6 +138,15 @@ static bool resolve_op_value( insn_t decodedInsn, uint64& resolved )
 	resolved = v;
 
 	return true;
+}
+
+static ea_t resolve_op_ea(const insn_t & decodedInsn) {
+
+	ea_t result = BADADDR64;
+
+	resolve_op_value(decodedInsn, result);
+
+	return result;
 }
 
 struct idafn_t
