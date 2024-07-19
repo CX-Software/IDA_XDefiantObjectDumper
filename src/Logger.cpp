@@ -1,15 +1,14 @@
 #include "Header.h"
 
-namespace Utility
-{
+namespace Utility {
 	HMODULE ourModuleHandle;
 
 	HMODULE GetOurModuleHandle() {
 
-		if (!ourModuleHandle) {
-			GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-				reinterpret_cast<LPCSTR>(&GetOurModuleHandle),
-				&ourModuleHandle);
+		if ( !ourModuleHandle ) {
+			GetModuleHandleExA( GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+				reinterpret_cast<LPCSTR>( &GetOurModuleHandle ),
+				&ourModuleHandle );
 		}
 
 		return ourModuleHandle;
@@ -21,18 +20,18 @@ namespace Utility
 
 		char inBuf[MAX_PATH];
 
-		ZeroMemory(inBuf, MAX_PATH);
+		ZeroMemory( inBuf, MAX_PATH );
 
-		GetModuleFileNameA(hModule, inBuf, MAX_PATH);
+		GetModuleFileNameA( hModule, inBuf, MAX_PATH );
 
-		auto str = std::string(inBuf);
+		auto str = std::string( inBuf );
 
-		auto seperator = str.find_last_of("\\");
+		auto seperator = str.find_last_of( "\\" );
 
-		if (seperator != std::string::npos)
+		if ( seperator != std::string::npos )
 			seperator += 1;
 
-		return str.substr(0, seperator);
+		return str.substr( 0, seperator );
 
 	}
 
@@ -41,17 +40,17 @@ namespace Utility
 		//Remove();
 	}
 
-	void Logger::Write(int logLevel, const char* format, ...) const {
+	void Logger::Write( int logLevel, const char* format, ... ) const {
 
-		if (!format || *format == '\0')
+		if ( !format || *format == '\0' )
 			return;
 
 		char buffer[0x1498];
 
 		va_list va;
-		va_start(va, format);
-		vsprintf_s(buffer, format, va);
-		va_end(va);
+		va_start( va, format );
+		vsprintf_s( buffer, format, va );
+		va_end( va );
 
 		if ( logLevel != 0 ) {
 
@@ -76,11 +75,10 @@ namespace Utility
 		auto logPath = GetRunningExecutableFolder() + "\\output.log";
 
 
-		remove(logPath.c_str());
+		remove( logPath.c_str() );
 	}
 
 	Logger::~Logger() {
 
 	}
 }
-

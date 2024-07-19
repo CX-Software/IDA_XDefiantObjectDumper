@@ -10,8 +10,7 @@
 
 #define LOG_SERVER(x,...) g_logfile.Write(103, x, __VA_ARGS__);
 
-enum class eLogLevel
-{
+enum class eLogLevel {
 	LOG_LEVEL_INFO,
 	LOG_LEVEL_WARNING,
 	LOG_LEVEL_ERRROR,
@@ -19,13 +18,12 @@ enum class eLogLevel
 	LOG_LEVEL_SERVER = LOG_LEVEL_FATAL + 100,
 };
 
-namespace Utility
-{
+namespace Utility {
 	class Logger sealed {
 	public:
-		explicit Logger(std::string filename) {}
+		explicit Logger( std::string filename ) {}
 		Logger();
-		void Write(int logLevel, const char* format, ...) const;
+		void Write( int logLevel, const char* format, ... ) const;
 		void Remove() const;
 		~Logger();
 

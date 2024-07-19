@@ -99,13 +99,13 @@ static sval_t regval(
 	return named_regval( ph.reg_names[op.reg] );
 }
 
-static bool resolve_op_value(const insn_t& decodedInsn, uint64& resolved )
+static bool resolve_op_value( const insn_t& decodedInsn, uint64& resolved )
 {
 	// Get operand value (possibly an ea).
 	uint64 v = 0;
 	const op_t& op = decodedInsn.ops[0].type != o_reg ? decodedInsn.ops[0] : decodedInsn.ops[1];
 
-	//LOG("type %i\n", op.type);
+	//LOG( "type %i\n", op.type );
 
 	switch ( op.type ) {
 	case o_reg:
@@ -140,17 +140,16 @@ static bool resolve_op_value(const insn_t& decodedInsn, uint64& resolved )
 	return true;
 }
 
-static ea_t resolve_op_ea(const insn_t & decodedInsn) {
+static ea_t resolve_op_ea( const insn_t& decodedInsn ) {
 
 	ea_t result = BADADDR64;
 
-	resolve_op_value(decodedInsn, result);
+	resolve_op_value( decodedInsn, result );
 
 	return result;
 }
 
-struct idafn_t
-{
+struct idafn_t {
 	ea_t fnaddr;
 	func_t* pfn;
 	range_t areafnl;
@@ -165,12 +164,12 @@ struct idafn_t
 
 	__forceinline void goto_func()
 	{
-		jumpto(areafnl.start_ea);
+		jumpto( areafnl.start_ea );
 	};
 
-	__forceinline void load_func_block(ea_t addr, size_t range)
+	__forceinline void load_func_block( ea_t addr, size_t range )
 	{
-		fnaddr = addr;	
+		fnaddr = addr;
 		areafnl.start_ea = addr;
 		areafnl.end_ea = addr + range;
 		fnsize = areafnl.end_ea - areafnl.start_ea;
@@ -178,16 +177,16 @@ struct idafn_t
 	};
 
 
-	__forceinline void load_func(ea_t addr)
+	__forceinline void load_func( ea_t addr )
 	{
 		//fnaddr = addr;
-		pfn = get_func(addr);
-		
-		auto rs = rangeset_t(areafnl);
-		bool fnlim = get_func_ranges(&rs, pfn);
+		pfn = get_func( addr );
 
-		if (!fnlim)
-			find_func_bounds(pfn, FIND_FUNC_NORMAL);
+		auto rs = rangeset_t( areafnl );
+		bool fnlim = get_func_ranges( &rs, pfn );
+
+		if ( !fnlim )
+			find_func_bounds( pfn, FIND_FUNC_NORMAL );
 
 		fnaddr = fnlim ? areafnl.start_ea : pfn->start_ea;
 		fnsize = fnlim ? areafnl.end_ea - areafnl.start_ea : pfn->size();
@@ -196,23 +195,21 @@ struct idafn_t
 
 	__forceinline bool decode_next_insn()
 	{
-		if (eaToDecode == BADADDR)
-		{
+		if ( eaToDecode == BADADDR ) {
 			return false;
 		}
-		if (eaToDecode >= areafnl.end_ea)
-		{
+		if ( eaToDecode >= areafnl.end_ea ) {
 			return false;
 		}
 
 		insn_t insn;
-		decode_insn(&insn, eaToDecode);
+		decode_insn( &insn, eaToDecode );
 		eaToDecode += insn.size;
-		memcpy(&decodedInsn, &insn, sizeof(insn_t));
+		memcpy( &decodedInsn, &insn, sizeof( insn_t ) );
 		return true;
 	};
 
-	__forceinline bool peek_next_insn(insn_t & nextInsn)
+	__forceinline bool peek_next_insn( insn_t& nextInsn )
 	{
 		if ( eaToDecode == BADADDR ) {
 			return false;
@@ -229,7 +226,7 @@ struct idafn_t
 		return true;
 	};
 
-	ea_t find_pattern(int* asmPat, size_t asmCount) const
+	ea_t find_pattern( int* asmPat, size_t asmCount ) const
 	{
 		/*
 		finds an asm pattern
@@ -259,26 +256,22 @@ struct idafn_t
 		size_t asmPatSize = 0;
 		uint16 cmdSize = 0;
 
-		for (ea_t i = pfn->start_ea; i <  pfn->end_ea; i += cmdSize)
-		{
+		for ( ea_t i = pfn->start_ea; i < pfn->end_ea; i += cmdSize ) {
 			insn_t instn;
-			decode_insn(&instn, i);
+			decode_insn( &instn, i );
 			cmdSize = instn.size;
 
-			if (instn.itype != asmPat[asmPatIdx])
-			{
+			if ( instn.itype != asmPat[asmPatIdx] ) {
 				asmPatIdx = 0;
 				asmPatSize = 0;
 			}
 
-			else
-			{
+			else {
 				++asmPatIdx;
 				asmPatSize += cmdSize;
-			}	
+			}
 
-			if (asmPatIdx >= asmCount)
-			{
+			if ( asmPatIdx >= asmCount ) {
 				return instn.ea + instn.size - asmPatSize;
 			}
 		}
@@ -287,47 +280,45 @@ struct idafn_t
 	};
 };
 
-struct SFilePathA
-{
+struct SFilePathA {
 	char szPath[_MAX_PATH];
 	char szDrive[_MAX_DRIVE];
 	char szDir[_MAX_DIR];
 	char szName[_MAX_FNAME];
 	char szExt[_MAX_EXT];
 
-	__forceinline void init_file(const char* file)
+	__forceinline void init_file( const char* file )
 	{
-		strcpy_s(szPath, file);
-		_splitpath_s(szPath, szDrive, _MAX_DRIVE, szDir, _MAX_DIR, szName, _MAX_FNAME, szExt, _MAX_EXT);
+		strcpy_s( szPath, file );
+		_splitpath_s( szPath, szDrive, _MAX_DRIVE, szDir, _MAX_DIR, szName, _MAX_FNAME, szExt, _MAX_EXT );
 	};
 
-	__forceinline void init_module(const char* name)
+	__forceinline void init_module( const char* name )
 	{
 		char modfile[MAX_PATH];
-		GetModuleFileNameA(GetModuleHandleA(name), modfile, MAX_PATH);
-		init_file(modfile);
+		GetModuleFileNameA( GetModuleHandleA( name ), modfile, MAX_PATH );
+		init_file( modfile );
 	};
 };
 
-struct SFilePathW
-{
+struct SFilePathW {
 	wchar_t szPath[_MAX_PATH];
 	wchar_t szDrive[_MAX_DRIVE];
 	wchar_t szDir[_MAX_DIR];
 	wchar_t szName[_MAX_FNAME];
 	wchar_t szExt[_MAX_EXT];
 
-	__forceinline void init_file(const wchar_t* file)
+	__forceinline void init_file( const wchar_t* file )
 	{
-		wcscpy_s(szPath, file);
-		_wsplitpath_s(szPath, szDrive, _MAX_DRIVE, szDir, _MAX_DIR, szName, _MAX_FNAME, szExt, _MAX_EXT);
+		wcscpy_s( szPath, file );
+		_wsplitpath_s( szPath, szDrive, _MAX_DRIVE, szDir, _MAX_DIR, szName, _MAX_FNAME, szExt, _MAX_EXT );
 	};
 
-	__forceinline void init_module(const wchar_t* name)
+	__forceinline void init_module( const wchar_t* name )
 	{
 		wchar_t modfile[MAX_PATH];
-		GetModuleFileNameW(GetModuleHandleW(name), modfile, MAX_PATH);
-		init_file(modfile);
+		GetModuleFileNameW( GetModuleHandleW( name ), modfile, MAX_PATH );
+		init_file( modfile );
 	};
 };
 

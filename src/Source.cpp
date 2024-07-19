@@ -1,15 +1,30 @@
 #include "Header.h"
 
-bool handle_object_name( const ea_t object_name_ea, qstring& qsObjectName ) {
+size_t g_num_obj_found = 0;
 
-	auto len = get_max_strlit_length( object_name_ea, STRTYPE_C, ALOPT_ONLYTERM );
+void sanitize_utf8_string( qstring& string ) {
 
-	auto ssz = get_strlit_contents( &qsObjectName, object_name_ea, len, STRTYPE_C );
+	int start = 0, end = string.length() - 1;
 
-	if ( qsObjectName.empty()) {
+	while ( end >= 0 && string[end] == ' ' )
+		--end;
 
+	while ( start <= end && string[start] == ' ' )
+		++start;
+
+	string = string.substr( start, end - start + 1 );
+}
+
+bool resolve_utf8_str( const ea_t ea, qstring& outString ) {
+
+	auto len = get_max_strlit_length( ea, STRTYPE_C, ALOPT_ONLYTERM );
+
+	auto ssz = get_strlit_contents( &outString, ea, len, STRTYPE_C );
+
+	if ( outString.empty() )
 		return false;
-	}
+
+	sanitize_utf8_string( outString );
 
 	return true;
 }
@@ -18,13 +33,13 @@ ea_t get_nested_virtual_method( ea_t ea_start )
 {
 	auto resolved_ea = get_64bit( ea_start );
 
-	if ( resolved_ea && resolved_ea != BADADDR64 ) {
+	if ( resolved_ea && resolved_ea != BADADDR ) {
 
 		resolved_ea += 0x58; // into virtual table
 
 		resolved_ea = get_64bit( resolved_ea );
 
-		if ( resolved_ea && resolved_ea != BADADDR64) {
+		if ( resolved_ea && resolved_ea != BADADDR ) {
 
 			auto pFunc = get_func( resolved_ea );
 			if ( pFunc ) {
@@ -34,15 +49,14 @@ ea_t get_nested_virtual_method( ea_t ea_start )
 
 				resolved_ea = find_binary( pFunc->start_ea, pFunc->end_ea, searchString1, get_default_radix(), SEARCH_DOWN );
 
-				if (!resolved_ea || resolved_ea == BADADDR64)
-					resolved_ea = find_binary(pFunc->start_ea, pFunc->end_ea, searchString2, get_default_radix(), SEARCH_DOWN);
+				if ( !resolved_ea || resolved_ea == BADADDR )
+					resolved_ea = find_binary( pFunc->start_ea, pFunc->end_ea, searchString2, get_default_radix(), SEARCH_DOWN );
 
-				if (!resolved_ea || resolved_ea == BADADDR64)
-				{
-					LOG("Pattern search failed: %llX\n", pFunc->start_ea);
+				if ( !resolved_ea || resolved_ea == BADADDR ) {
+					LOG( "Pattern search failed: %llX\n", pFunc->start_ea );
 				}
 
-				if ( resolved_ea && resolved_ea != BADADDR64) {
+				if ( resolved_ea && resolved_ea != BADADDR ) {
 					insn_t insn;
 
 					decode_insn( &insn, resolved_ea );
@@ -59,47 +73,47 @@ ea_t get_nested_virtual_method( ea_t ea_start )
 		}
 	}
 
-	return BADADDR64;
+	return BADADDR;
 }
 
-bool is_address_in_seg(ea_t ea, const char * pchSegmentName)
+bool is_address_in_seg( ea_t ea, const char* pchSegmentName )
 {
-	segment_t* seg = getseg(ea);
+	segment_t* seg = getseg( ea );
 
-	if (seg == nullptr) {
+	if ( seg == nullptr ) {
 
-		LOG("early out: no seg!\n");
+		LOG( "early out: no seg!\n" );
 
 		return false;
 	}
 
 	qstring seg_name;
-	auto ssize = get_segm_name(&seg_name, seg);
+	auto ssize = get_segm_name( &seg_name, seg );
 	return !seg_name.empty() && seg_name == pchSegmentName;
 }
 
 bool run_plugin() {
 
-	segment_t* base_seg = get_segm_by_name(".text");
+	segment_t* base_seg = get_segm_by_name( ".text" );
 
 	const auto searchString = "48 89 5C 24 ? 48 89 6C 24 ? 48 89 74 24 ? 57 48 83 EC 20 48 8D 05 ? ? ? ? 48 8B FA 48 89 01 48 8B D9";
 
 	ea_t xref_to_call_array[20000]{};
 	int found = 0;
 
-	ea_t ea_insn = find_binary(base_seg->start_ea, base_seg->end_ea, searchString, get_default_radix(), SEARCH_DOWN);
+	ea_t ea_insn = find_binary( base_seg->start_ea, base_seg->end_ea, searchString, get_default_radix(), SEARCH_DOWN );
 
-	if (ea_insn == BADADDR64)
+	if ( ea_insn == BADADDR )
 		return false;
 
-	func_t* fn = get_func(ea_insn);
+	func_t* fn = get_func( ea_insn );
 
-	if (fn) {
+	if ( fn ) {
 
 		xrefblk_t xr;
 		xr = { 0 };
-		for (bool success = xr.first_to((ea_t)fn->start_ea, XREF_FAR); success; success = xr.next_to()) {
-			if (xr.iscode == 0) {
+		for ( bool success = xr.first_to( (ea_t)fn->start_ea, XREF_FAR ); success; success = xr.next_to() ) {
+			if ( xr.iscode == 0 ) {
 				break;
 			}
 
@@ -107,9 +121,9 @@ bool run_plugin() {
 		}
 	}
 
-	LOG("Found %i xrefs to fn\n", found);
+	LOG( "Found %i xrefs to fn\n", found );
 
-	for (int i = 0; i < found; i++) {
+	for ( int i = 0; i < found; i++ ) {
 
 		auto chunk_start_ea = xref_to_call_array[i],
 			chunk_end_ea = xref_to_call_array[i] + 0x48;
@@ -118,49 +132,61 @@ bool run_plugin() {
 
 		idafn_t ifn;
 
-		ifn.load_func_block(chunk_start_ea, chunk_end_ea - chunk_start_ea);
+		ifn.load_func_block( chunk_start_ea, chunk_end_ea - chunk_start_ea );
 
 		bool bfoundins = false;
 
-		while (ifn.decode_next_insn()) {
+		while ( ifn.decode_next_insn() ) {
 
-			if (ifn.decodedInsn.itype == NN_mov && ifn.decodedInsn.ops[1].value == 1) {
+			if ( ifn.decodedInsn.itype == NN_mov && ifn.decodedInsn.ops[1].value == 1 ) {
 
-				if (ifn.decode_next_insn() && ifn.decodedInsn.itype == NN_mov &&
-					ifn.decodedInsn.ops[1].type == o_reg && ifn.decodedInsn.ops[1].reg == 0) {
+				if ( ifn.decode_next_insn() && ifn.decodedInsn.itype == NN_mov && // check if this is the instruction loading the base address of the class
+					ifn.decodedInsn.ops[1].type == o_reg && ifn.decodedInsn.ops[1].reg == 0 ) {
 
-					ea_t resolved_ea = BADADDR64;
+					ea_t resolved_func_ea = BADADDR;
 
-					if (resolve_op_value(ifn.decodedInsn, resolved_ea)) {
+					if ( resolve_op_value( ifn.decodedInsn, resolved_func_ea ) ) {
 
-						if (is_address_in_seg(resolved_ea, ".data")) {
+						if ( is_address_in_seg( resolved_func_ea, ".data" ) ) {
 
-							LOG("\n\nResolved class at %llX: %llX\n", ifn.decodedInsn.ea, resolved_ea);
-	
-							resolved_ea = get_nested_virtual_method(resolved_ea);
+							//LOG("\n\nResolved class at %llX: %llX\n", ifn.decodedInsn.ea, resolved_ea);
 
-							LOG("Actual function address: %llX\n", resolved_ea);
+							resolved_func_ea = get_nested_virtual_method( resolved_func_ea );
 
-							if (resolved_ea != BADADDR) {
+							//LOG("Actual function address: %llX\n", resolved_ea);
 
-								while (ifn.decode_next_insn()) {
+							if ( resolved_func_ea != BADADDR ) {
 
-									if (ifn.decodedInsn.itype == NN_lea &&
-										ifn.decodedInsn.ops[0].type == o_reg && ifn.decodedInsn.ops[0].reg == 0/*is_address_in_seg(resolve_op_ea(ifn.decodedInsn), ".rdata")*/) {
+								while ( ifn.decode_next_insn() ) { // search down for the instruction that references the object name
+
+									if ( ifn.decodedInsn.itype == NN_lea && // check if this is the instruction loading the name from .rdata
+										ifn.decodedInsn.ops[0].type == o_reg && ifn.decodedInsn.ops[0].reg == 0 && ifn.decodedInsn.ops[1].type == o_mem/*is_address_in_seg(resolve_op_ea(ifn.decodedInsn), ".rdata")*/ ) {
 
 										ea_t ea_object_name; qstring qs_object_name;
-										if (resolve_op_value(ifn.decodedInsn, ea_object_name)) {
+										if ( resolve_op_value( ifn.decodedInsn, ea_object_name ) ) {
 
-											handle_object_name(ea_object_name, qs_object_name);
+											auto pfn = get_func( resolved_func_ea );
 
-											set_name(resolved_ea, qs_object_name.c_str(), SN_PUBLIC | SN_FORCE);
+											if ( !pfn ) {
+												if ( !add_func( resolved_func_ea ) ) {
+													LOG( "failed to resolve any function @ %llX\n", resolved_func_ea );
+												}
+											}
 
-											LOG("%s = %llX\n", qs_object_name.c_str(), resolved_ea);
+											if ( !resolve_utf8_str( ea_object_name, qs_object_name ) ) {
+												LOG( "failed to resolve function name in .rdata @ %llX ref ea: %llX\n", ea_object_name, chunk_start_ea );
+											}
+
+											set_name( resolved_func_ea, qs_object_name.c_str(), SN_NOCHECK | SN_PUBLIC | SN_WEAK | SN_NON_AUTO | SN_DELTAIL | SN_FORCE );
+
+											LOG( "%s = %llX\n", qs_object_name.c_str(), resolved_func_ea );
+
+											g_num_obj_found++;
 										}
 
 										else {
 
-											LOG("Unk_%llX at %llX\n", resolved_ea, resolved_ea);
+											LOG( "Unk_%llX at %llX\n", resolved_func_ea, resolved_func_ea );
 										}
 
 										break;
@@ -168,18 +194,18 @@ bool run_plugin() {
 								}
 							}
 							else
-								LOG("Found unusual control flow @ %llX\n", ifn.decodedInsn.ea);
+								LOG( "Found unusual control flow @ %llX\n", ifn.decodedInsn.ea );
 						}
 						else
-							LOG("Address is not in seg! %llX @ %llX\n", resolved_ea, ifn.decodedInsn.ea);
+							LOG( "Address is not in seg! %llX @ %llX\n", resolved_func_ea, ifn.decodedInsn.ea );
 
 					}
 
 					else
-						LOG("Can't resolve op value @ %llX\n", ifn.decodedInsn.ea);
+						LOG( "Can't resolve op value @ %llX\n", ifn.decodedInsn.ea );
 
 				}
-			}			
+			}
 		}
 	}
 
@@ -202,13 +228,17 @@ bool _stdcall IDAP_run( size_t arg ) {
 
 	LOG( "Begin object scan...\n" );
 
+	g_num_obj_found = 0;
+
 	DWORD scanStartTick = GetTickCount64();
 
 	run_plugin();
 
-	DWORD scanTimeTakenSec = ( GetTickCount64() - scanStartTick ) / 1000;
+	DWORD scanEndTick = GetTickCount64();
 
-	msg( "Scan Finished. Time Taken: (approx.) %d Second(s).\n", scanTimeTakenSec );
+	double scanTimeTakenSec = ( scanEndTick - scanStartTick ) / 1000.0;
+
+	msg( "Scan Finished. Renamed %d functions. Time Taken: (approx.) %.3f sec(s).\n", g_num_obj_found, scanTimeTakenSec );
 
 	PLUGIN.flags |= PLUGIN_UNL;
 
