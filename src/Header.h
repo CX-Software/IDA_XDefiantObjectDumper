@@ -176,7 +176,6 @@ struct idafn_t {
 		eaToDecode = fnaddr;
 	};
 
-
 	__forceinline void load_func( ea_t addr )
 	{
 		//fnaddr = addr;

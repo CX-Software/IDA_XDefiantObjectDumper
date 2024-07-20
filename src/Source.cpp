@@ -29,8 +29,8 @@ bool resolve_utf8_str( const ea_t ea, qstring& outString ) {
 	return true;
 }
 
-ea_t get_nested_virtual_method( ea_t ea_start )
-{
+ea_t get_nested_virtual_method( ea_t ea_start ) {
+
 	auto resolved_ea = get_64bit( ea_start );
 
 	if ( resolved_ea && resolved_ea != BADADDR ) {
@@ -44,30 +44,52 @@ ea_t get_nested_virtual_method( ea_t ea_start )
 			auto pFunc = get_func( resolved_ea );
 			if ( pFunc ) {
 
-				const auto searchString1 = "48 ? ? ? ? ? ? 66";
-				const auto searchString2 = "48 ? ? ? ? ? ? 48";
+				idafn_t ifn;
+				ifn.load_func_block( pFunc->start_ea, pFunc->end_ea - pFunc->start_ea );
 
-				resolved_ea = find_binary( pFunc->start_ea, pFunc->end_ea, searchString1, get_default_radix(), SEARCH_DOWN );
+				while ( ifn.decode_next_insn() ) {
 
-				if ( !resolved_ea || resolved_ea == BADADDR )
-					resolved_ea = find_binary( pFunc->start_ea, pFunc->end_ea, searchString2, get_default_radix(), SEARCH_DOWN );
+					if ( ifn.decodedInsn.itype == NN_jmp ) {
 
-				if ( !resolved_ea || resolved_ea == BADADDR ) {
-					LOG( "Pattern search failed: %llX\n", pFunc->start_ea );
+						insn_t insn;
+
+						resolve_op_value( ifn.decodedInsn, resolved_ea );
+
+						LOG( "Resolved nested jmp ( %llX -> %llX ) searching again...\n", ifn.decodedInsn.ea, resolved_ea );
+
+						pFunc = get_func( resolved_ea );
+
+						break;
+					}
 				}
 
-				if ( resolved_ea && resolved_ea != BADADDR ) {
-					insn_t insn;
+				if ( pFunc ) {
 
-					decode_insn( &insn, resolved_ea );
+					ifn.load_func_block( pFunc->start_ea, pFunc->end_ea - pFunc->start_ea );
 
-					resolved_ea = insn.ops[1].addr;
+					resolved_ea = BADADDR;
 
-					resolved_ea += 0x78; // into virtual table
+					while ( ifn.decode_next_insn() ) {
 
-					resolved_ea = get_64bit( resolved_ea );
+						if ( ifn.decodedInsn.itype == NN_lea && ifn.decodedInsn.ops[1].type == o_mem ) {
 
-					return resolved_ea;
+							resolved_ea = ifn.decodedInsn.ea;
+						}
+					}
+
+					if ( resolved_ea && resolved_ea != BADADDR ) {
+
+						insn_t insn;
+						decode_insn( &insn, resolved_ea );
+
+						resolved_ea = insn.ops[1].addr;
+
+						resolved_ea += 0x78; // into virtual table
+
+						resolved_ea = get_64bit( resolved_ea );
+
+						return resolved_ea;
+					}
 				}
 			}
 		}
@@ -76,8 +98,8 @@ ea_t get_nested_virtual_method( ea_t ea_start )
 	return BADADDR;
 }
 
-bool is_address_in_seg( ea_t ea, const char* pchSegmentName )
-{
+bool is_address_in_seg( ea_t ea, const char* pchSegmentName ) {
+
 	segment_t* seg = getseg( ea );
 
 	if ( seg == nullptr ) {
@@ -138,7 +160,9 @@ bool run_plugin() {
 
 		while ( ifn.decode_next_insn() ) {
 
-			if ( ifn.decodedInsn.itype == NN_mov && ifn.decodedInsn.ops[1].value == 1 ) {
+			if ( ifn.decodedInsn.itype == NN_mov && ( ifn.decodedInsn.ops[1].value == 1 ||
+				( ifn.decodedInsn.ops[1].type == o_reg &&
+					( ifn.decodedInsn.ops[1].reg == 3 || ifn.decodedInsn.ops[1].reg == 14 ) ) ) ) {
 
 				if ( ifn.decode_next_insn() && ifn.decodedInsn.itype == NN_mov && // check if this is the instruction loading the base address of the class
 					ifn.decodedInsn.ops[1].type == o_reg && ifn.decodedInsn.ops[1].reg == 0 ) {
@@ -203,7 +227,6 @@ bool run_plugin() {
 
 					else
 						LOG( "Can't resolve op value @ %llX\n", ifn.decodedInsn.ea );
-
 				}
 			}
 		}
