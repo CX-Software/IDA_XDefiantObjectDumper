@@ -94,9 +94,9 @@ static sval_t regval(
 	const op_t& op )
 {
 	// Check for bad register number.
-	if ( op.reg > ph.regs_num )
+	if ( op.reg > get_ph()->regs_num )
 		return 0;
-	return named_regval( ph.reg_names[op.reg] );
+	return named_regval( get_ph()->reg_names[op.reg] );
 }
 
 static bool resolve_op_value( const insn_t& decodedInsn, uint64& resolved )
@@ -120,8 +120,8 @@ static bool resolve_op_value( const insn_t& decodedInsn, uint64& resolved )
 	case o_displ:
 		// Memory references using register and address value.
 		v = regval( op ) + op.value + op.addr;
-		if ( v < inf.min_ea )
-			v += inf.min_ea - 0x1000;
+		if ( v < getinf( INF_MIN_EA ) )
+			v += getinf( INF_MIN_EA ) - 0x1000;
 		break;
 	case o_imm:
 		// Immediates are stored in op.value.
