@@ -30,72 +30,50 @@ bool resolve_utf8_str( const ea_t ea, qstring& outString ) {
 }
 
 ea_t get_nested_virtual_method( ea_t ea_start ) {
+    auto resolved_ea = ea_start;
 
-	auto resolved_ea = ea_start;// get_64bit( ea_start );
+    if ( resolved_ea == BADADDR ) return BADADDR;
 
-	if ( resolved_ea && resolved_ea != BADADDR ) {
+    resolved_ea += 0x58; // into virtual table
+    resolved_ea = get_64bit( resolved_ea );
 
-		resolved_ea += 0x58; // into virtual table
+    if ( resolved_ea == BADADDR ) return BADADDR;
 
-		resolved_ea = get_64bit( resolved_ea );
+    auto pFunc = get_func( resolved_ea );
+    if ( !pFunc ) return BADADDR;
 
-		if ( resolved_ea && resolved_ea != BADADDR ) {
+    idafn_t ifn;
+    ifn.load_func_block( pFunc->start_ea, pFunc->end_ea - pFunc->start_ea );
 
-			auto pFunc = get_func( resolved_ea );
-			if ( pFunc ) {
+    while ( ifn.decode_next_insn() ) {
+        if ( ifn.decodedInsn.itype == NN_jmp ) {
+            resolve_op_value( ifn.decodedInsn, resolved_ea );
+            LOG( "Resolved nested jmp ( %llX -> %llX ) searching again...\n", ifn.decodedInsn.ea, resolved_ea );
+            pFunc = get_func( resolved_ea );
+            break;
+        }
+    }
 
-				idafn_t ifn;
-				ifn.load_func_block( pFunc->start_ea, pFunc->end_ea - pFunc->start_ea );
+    if ( !pFunc ) return BADADDR;
 
-				while ( ifn.decode_next_insn() ) {
+    ifn.load_func_block( pFunc->start_ea, pFunc->end_ea - pFunc->start_ea );
+    resolved_ea = BADADDR;
 
-					if ( ifn.decodedInsn.itype == NN_jmp ) {
+    while ( ifn.decode_next_insn() ) {
+        if ( ifn.decodedInsn.itype == NN_lea && ifn.decodedInsn.ops[1].type == o_mem ) {
+            resolved_ea = ifn.decodedInsn.ea;
+        }
+    }
 
-						insn_t insn;
+    if ( resolved_ea == BADADDR ) return BADADDR;
 
-						resolve_op_value( ifn.decodedInsn, resolved_ea );
+    insn_t insn;
+    decode_insn( &insn, resolved_ea );
+    resolved_ea = insn.ops[1].addr;
+    resolved_ea += 0x78; // into virtual table
+    resolved_ea = get_64bit( resolved_ea );
 
-						LOG( "Resolved nested jmp ( %llX -> %llX ) searching again...\n", ifn.decodedInsn.ea, resolved_ea );
-
-						pFunc = get_func( resolved_ea );
-
-						break;
-					}
-				}
-
-				if ( pFunc ) {
-
-					ifn.load_func_block( pFunc->start_ea, pFunc->end_ea - pFunc->start_ea );
-
-					resolved_ea = BADADDR;
-
-					while ( ifn.decode_next_insn() ) {
-
-						if ( ifn.decodedInsn.itype == NN_lea && ifn.decodedInsn.ops[1].type == o_mem ) {
-
-							resolved_ea = ifn.decodedInsn.ea;
-						}
-					}
-
-					if ( resolved_ea && resolved_ea != BADADDR ) {
-
-						insn_t insn;
-						decode_insn( &insn, resolved_ea );
-
-						resolved_ea = insn.ops[1].addr;
-
-						resolved_ea += 0x78; // into virtual table
-
-						resolved_ea = get_64bit( resolved_ea );
-
-						return resolved_ea;
-					}
-				}
-			}
-		}
-	}
-
-	return BADADDR;
+    return resolved_ea;
 }
 
 bool is_address_in_seg( ea_t ea, const char* pchSegmentName ) {
